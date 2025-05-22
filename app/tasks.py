@@ -1,33 +1,46 @@
+from pymongo import MongoClient
+
 class TaskManager:
-    def __init__(self):
-        self.tasks = {}
-        self.counter = 1
+    def __init__(self, mongo_uri='mongodb://mongo:27017/taskmanager'):
+        self.client = MongoClient(mongo_uri)
+        self.db = self.client.taskmanager
+        self.tasks = self.db.tasks
 
     def create_task(self, title, description=None, due_date=None):
         task = {
-            'id': self.counter,
             'title': title,
             'description': description,
             'due_date': due_date,
             'done': False
         }
-        self.tasks[self.counter] = task
-        self.counter += 1
+        result = self.tasks.insert_one(task)
+        task['id'] = str(result.inserted_id)
         return task
 
     def list_tasks(self, search_term=None, order_by=None):
-        tasks = self.tasks.values()
+        query = {}
         if search_term:
-            tasks = [task for task in tasks if search_term.lower() in task['title'].lower() or (task['description'] and search_term.lower() in task['description'].lower())]
+            query = {
+                '$or': [
+                    {'title': {'$regex': search_term, '$options': 'i'}},
+                    {'description': {'$regex': search_term, '$options': 'i'}}
+                ]
+            }
+        tasks = list(self.tasks.find(query))
+        for task in tasks:
+            task['id'] = str(task.pop('_id'))
         if order_by:
             tasks = sorted(tasks, key=lambda x: x.get(order_by, ''))
-        return list(tasks)
+        return tasks
 
     def get_task(self, task_id):
-        return self.tasks.get(task_id)
+        task = self.tasks.find_one({'_id': task_id})
+        if task:
+            task['id'] = str(task.pop('_id'))
+        return task
 
     def mark_done(self, task_id):
-        task = self.tasks.get(task_id)
-        if task:
-            task['done'] = True
-        return task
+        result = self.tasks.update_one({'_id': task_id}, {'$set': {'done': True}})
+        if result.modified_count > 0:
+            return self.get_task(task_id)
+        return None

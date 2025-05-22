@@ -1,8 +1,11 @@
+import os
+
 from flask import Flask, request, jsonify
 from tasks import TaskManager
 
 app = Flask(__name__)
-task_manager = TaskManager()
+mongo_uri = os.getenv('MONGO_URI', 'mongodb://mongo:27017/taskmanager')
+task_manager = TaskManager(mongo_uri)
 
 @app.route('/tasks', methods=['POST'])
 def create_task():
